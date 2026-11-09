@@ -59,24 +59,16 @@ final class StatusBarController {
             button.title = "GP"
             return
         }
+        // Use the system menu bar appearance in both connected and idle states.
+        // Template rendering adapts to light/dark backgrounds and menu highlighting.
+        let template = base.copy() as! NSImage
+        template.isTemplate = true
+        button.image = template
+
         if bluetoothWarning != nil {
-            // A Bluetooth problem means the app is inactive. Keep the normal template glyph
-            // (so it renders the same soft gray as idle, not a heavier solid black) and
-            // overlay a yellow warning badge on top.
-            let template = base.copy() as! NSImage
-            template.isTemplate = true
-            button.image = template
             showWarningBadge(on: button)
-        } else if !connectedPeers.isEmpty {
-            hideWarningBadge(on: button)
-            let aqua = base.colorized(with: Self.brandAqua)
-            aqua.isTemplate = false
-            button.image = aqua
         } else {
             hideWarningBadge(on: button)
-            let template = base.copy() as! NSImage
-            template.isTemplate = true
-            button.image = template
         }
     }
 
