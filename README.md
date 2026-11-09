@@ -69,6 +69,10 @@ The app auto-updates itself after install (via Sparkle), so `brew upgrade` is no
    - **Mac to Android:** copy text on Mac, it syncs automatically.
    - **Android to Mac:** select text on Android, Share → ClipRelay.
 
+### Menu bar icon on macOS
+
+Choose **Menu Bar Icon** in the Mac menu to select **Colored (Default)**, **Monochrome**, or **Monochrome with Connection Dot**. Colored keeps the original aqua connected icon and yellow sync flash. The monochrome styles use the system menu bar color (white on dark backgrounds, dark on light backgrounds) and pulse without changing color during sync. The connection dot is a small green circle at the bottom right, shown only while a device is connected and there is no Bluetooth warning. Your choice is saved between launches.
+
 ### Image sync *(experimental)*
 
 Image transfer uses a temporary TCP connection over your local WiFi (not Bluetooth) for speed. Both devices must be on the same WiFi network. Enable "Image Sync" in the paired device settings on both devices. When you copy an image on your Mac or share one from Android, it transfers encrypted over your local network — still AES-256-GCM encrypted, still no cloud.

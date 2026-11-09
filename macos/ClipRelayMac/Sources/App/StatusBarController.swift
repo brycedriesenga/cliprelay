@@ -37,6 +37,8 @@ final class StatusBarController {
     private var baseStatusBarImage: NSImage?
     private var syncPulseTimer: Timer?
 
+    private var menuBarIconStyle: MenuBarIconStyle { MenuBarIconStyle.load() }
+
     init(updaterController: SPUStandardUpdaterController) {
         self.updaterController = updaterController
         baseStatusBarImage = loadStatusBarIcon()
@@ -59,17 +61,65 @@ final class StatusBarController {
             button.title = "GP"
             return
         }
-        // Use the system menu bar appearance in both connected and idle states.
-        // Template rendering adapts to light/dark backgrounds and menu highlighting.
-        let template = base.copy() as! NSImage
-        template.isTemplate = true
-        button.image = template
+        if menuBarIconStyle == .colored && bluetoothWarning == nil && !connectedPeers.isEmpty {
+            let aqua = base.colorized(with: Self.brandAqua)
+            aqua.isTemplate = false
+            button.image = aqua
+        } else {
+            // Template rendering adapts to light/dark backgrounds and menu highlighting.
+            let template = base.copy() as! NSImage
+            template.isTemplate = true
+            button.image = template
+        }
 
         if bluetoothWarning != nil {
             showWarningBadge(on: button)
         } else {
             hideWarningBadge(on: button)
         }
+
+        // A Bluetooth warning takes priority over a potentially stale connection state.
+        if menuBarIconStyle == .connectionBadge && bluetoothWarning == nil && !connectedPeers.isEmpty {
+            showConnectionBadge(on: button)
+        } else {
+            hideConnectionBadge(on: button)
+        }
+    }
+
+    private static let connectionBadgeLayerName = "clipRelayConnectionBadge"
+
+    /// Keep the colored dot separate so AppKit can still tint the template glyph.
+    private func showConnectionBadge(on button: NSStatusBarButton) {
+        button.wantsLayer = true
+        guard let host = button.layer else { return }
+
+        let badge: CALayer
+        if let existing = host.sublayers?.first(where: { $0.name == Self.connectionBadgeLayerName }) {
+            badge = existing
+        } else {
+            badge = CALayer()
+            badge.name = Self.connectionBadgeLayerName
+            host.addSublayer(badge)
+        }
+
+        let pointSize: CGFloat = 6
+        let bounds = button.bounds
+        let glyph: CGFloat = 18
+        // The button's backing layer uses a top-left origin.
+        badge.frame = CGRect(x: (bounds.width + glyph) / 2 - pointSize + 1,
+                             y: (bounds.height + glyph) / 2 - pointSize + 1,
+                             width: pointSize, height: pointSize)
+        badge.cornerRadius = pointSize / 2
+        badge.backgroundColor = NSColor.systemGreen.cgColor
+        badge.borderColor = NSColor.black.withAlphaComponent(0.65).cgColor
+        badge.borderWidth = 0.75
+        badge.contentsScale = button.window?.backingScaleFactor ?? 2
+    }
+
+    private func hideConnectionBadge(on button: NSStatusBarButton) {
+        button.layer?.sublayers?
+            .first { $0.name == Self.connectionBadgeLayerName }?
+            .removeFromSuperlayer()
     }
 
     private static let warningBadgeLayerName = "clipRelayWarningBadge"
@@ -157,10 +207,15 @@ final class StatusBarController {
         // Cancel any in-progress pulse
         syncPulseTimer?.invalidate()
 
-        // Show bright highlight icon
-        let highlight = base.colorized(with: .systemYellow)
-        highlight.isTemplate = false
-        button.image = highlight
+        // Preserve the original yellow flash only in the colored style. Monochrome
+        // styles still pulse in size, but keep the system menu bar color during sync.
+        if menuBarIconStyle == .colored {
+            let highlight = base.colorized(with: .systemYellow)
+            highlight.isTemplate = false
+            button.image = highlight
+        } else {
+            updateStatusBarIcon()
+        }
 
         // Enable layer-backed view for Core Animation
         button.wantsLayer = true
@@ -238,6 +293,19 @@ final class StatusBarController {
             launchItem.state = .on
         }
         menu.addItem(launchItem)
+
+        let iconStyleItem = NSMenuItem(title: "Menu Bar Icon", action: nil, keyEquivalent: "")
+        let iconStyleMenu = NSMenu()
+        let selectedStyle = menuBarIconStyle
+        for style in MenuBarIconStyle.allCases {
+            let item = NSMenuItem(title: style.title, action: #selector(handleSelectMenuBarIconStyle(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = style.rawValue
+            item.state = style == selectedStyle ? .on : .off
+            iconStyleMenu.addItem(item)
+        }
+        iconStyleItem.submenu = iconStyleMenu
+        menu.addItem(iconStyleItem)
 
         let deviceConnected = isDeviceConnected?() ?? false
         let imageSyncItem = NSMenuItem(
@@ -402,6 +470,18 @@ final class StatusBarController {
     }
 
     // MARK: - Actions
+
+    @objc
+    private func handleSelectMenuBarIconStyle(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String,
+              let style = MenuBarIconStyle(rawValue: value) else { return }
+        style.save()
+        syncPulseTimer?.invalidate()
+        syncPulseTimer = nil
+        statusItem.button?.layer?.removeAnimation(forKey: "syncPulse")
+        updateStatusBarIcon()
+        renderMenu()
+    }
 
     @objc
     private func handlePairNewDevice() {
